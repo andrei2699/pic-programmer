@@ -4,7 +4,7 @@ use std::io;
 pub struct SerialWriter {}
 
 pub trait WriteSerial {
-    fn write(&mut self, port: &mut Box<dyn SerialPort>, string: &String);
+    fn write(&mut self, port: &mut Box<dyn SerialPort>, string: &str);
 }
 
 impl SerialWriter {
@@ -14,7 +14,7 @@ impl SerialWriter {
 }
 
 impl WriteSerial for SerialWriter {
-    fn write(&mut self, port: &mut Box<dyn SerialPort>, string: &String) {
+    fn write(&mut self, port: &mut Box<dyn SerialPort>, string: &str) {
         match port.write(string.as_bytes()) {
             Ok(_) => {
                 print!("{}", &string);

@@ -1,12 +1,12 @@
 use crate::programmer::serial_reader::ReadSerial;
 use crate::programmer::serial_writer::WriteSerial;
-use crate::programmer::states::ProgrammingStates;
 use serialport::SerialPort;
 use std::fs::File;
 use std::io::{BufReader, Lines};
 use std::str;
 
 const READY_MESSAGE: &'static str = "Programmer ready!";
+const END_OF_FILE: &'static str = ":00000001FF";
 
 pub struct SerialProgrammer<R: ReadSerial, W: WriteSerial> {
     reader: R,
@@ -18,38 +18,37 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
         SerialProgrammer { reader, writer }
     }
 
-    pub fn program(&mut self, port: &mut Box<dyn SerialPort>, mut lines: Lines<BufReader<File>>) {
-        let mut state: ProgrammingStates = ProgrammingStates::WaitToConnect;
+    pub fn program(&mut self, port: &mut Box<dyn SerialPort>, lines: Lines<BufReader<File>>) {
         let mut received_data = String::new();
 
+        self.wait_for_programmer_to_be_ready(port);
+        received_data.clear();
+
+        for line in lines {
+            let string = line.unwrap();
+            let trimmed_line = string.trim();
+            if trimmed_line.is_empty() {
+                continue;
+            }
+
+            self.writer.write(port, trimmed_line);
+
+            if trimmed_line.contains(END_OF_FILE) {
+                break;
+            }
+        }
+
+        println!("finished programming!")
+    }
+
+    fn wait_for_programmer_to_be_ready(&mut self, port: &mut Box<dyn SerialPort>) {
+        let mut received_data = String::new();
         loop {
             self.reader.read(port, &mut received_data);
 
-            if received_data.is_empty() {
-                continue;
-            }
-
             if received_data.contains(READY_MESSAGE) {
-                println!("Message received: {}", received_data);
-                state = ProgrammingStates::SendData;
-            }
-            println!("Received {}", received_data);
-
-            if state == ProgrammingStates::WaitToConnect
-            {
-                continue;
-            }
-
-            let option = lines.next();
-
-            match option {
-                None => {
-                    break
-                }
-                Some(value) => {
-                    let string = value.unwrap();
-                    self.writer.write(port, &string);
-                }
+                println!("Programmer start message: {}", received_data);
+                break;
             }
         }
     }
@@ -58,7 +57,7 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 #[cfg(test)]
 mod test {
     use crate::programmer::file_reader::get_lines;
-    use crate::programmer::serial_programmer::SerialProgrammer;
+    use crate::programmer::serial_programmer::{SerialProgrammer, END_OF_FILE};
     use crate::programmer::serial_reader::ReadSerial;
     use crate::programmer::serial_writer::WriteSerial;
     use crate::programmer::test_serial_port::TestSerialPort;
@@ -66,6 +65,19 @@ mod test {
     use std::env;
     use std::path::{Path, PathBuf};
 
+    #[test]
+    fn given_starting_message_in_multiple_chunks_and_empty_file_should_not_write_anything() {
+        let reader = ReaderTest { data: vec![String::from("Programmer "), String::from("ready"), String::from("!")], index: 0 };
+        let writer = WriterTest { data: vec![] };
+        let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
+        let lines = get_lines(&get_full_path("test-files/empty-file.hex").to_string_lossy().to_string());
+
+        let mut programmer = SerialProgrammer::new(reader, writer);
+
+        programmer.program(&mut port, lines);
+
+        assert_eq!(programmer.writer.data.is_empty(), true);
+    }
 
     #[test]
     fn given_all_starting_message_and_empty_file_should_not_write_anything() {
@@ -79,6 +91,49 @@ mod test {
         programmer.program(&mut port, lines);
 
         assert_eq!(programmer.writer.data.is_empty(), true);
+    }
+
+    #[test]
+    fn given_file_with_multiple_blank_lines_should_not_write_anything() {
+        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let writer = WriterTest { data: vec![] };
+        let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
+        let lines = get_lines(&get_full_path("test-files/empty-file.hex").to_string_lossy().to_string());
+
+        let mut programmer = SerialProgrammer::new(reader, writer);
+
+        programmer.program(&mut port, lines);
+
+        assert_eq!(programmer.writer.data.is_empty(), true);
+    }
+
+
+    #[test]
+    fn given_file_with_only_eof_should_write_one_instruction() {
+        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let writer = WriterTest { data: vec![] };
+        let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
+        let lines = get_lines(&get_full_path("test-files/only-eof.hex").to_string_lossy().to_string());
+
+        let mut programmer = SerialProgrammer::new(reader, writer);
+
+        programmer.program(&mut port, lines);
+
+        assert_eq!(programmer.writer.data[0], END_OF_FILE);
+    }
+
+    #[test]
+    fn given_file_eof_at_the_beginning_should_write_one_instruction() {
+        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let writer = WriterTest { data: vec![] };
+        let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
+        let lines = get_lines(&get_full_path("test-files/eof-at-the-beginning.hex").to_string_lossy().to_string());
+
+        let mut programmer = SerialProgrammer::new(reader, writer);
+
+        programmer.program(&mut port, lines);
+
+        assert_eq!(programmer.writer.data[0], END_OF_FILE);
     }
 
     struct ReaderTest {
@@ -97,7 +152,7 @@ mod test {
         data: Vec<String>,
     }
     impl WriteSerial for WriterTest {
-        fn write(&mut self, _port: &mut Box<dyn SerialPort>, string: &String) {
+        fn write(&mut self, _port: &mut Box<dyn SerialPort>, string: &str) {
             self.data.push(string.to_string())
         }
     }
