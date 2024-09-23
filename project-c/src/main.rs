@@ -4,7 +4,7 @@ mod programmer;
 
 use crate::commands::Commands;
 use crate::list_ports::list_ports;
-use crate::programmer::test_program::test_program;
+use crate::programmer::program_pic::program_pic;
 use clap::Parser;
 
 fn main() {
@@ -15,7 +15,7 @@ fn main() {
             list_ports()
         }
         Commands::Program { input_file_path, port_name, baud_rate, timeout } => {
-            test_program(input_file_path, port_name, baud_rate, timeout);
+            program_pic(input_file_path, port_name, baud_rate, timeout);
         }
     }
 }

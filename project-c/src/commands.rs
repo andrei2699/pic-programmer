@@ -23,7 +23,7 @@ pub enum Commands {
         #[arg(
             short,
             long,
-            default_value_t = 1000,
+            default_value_t = 5000,
             help = "Serial port connection timeout in milliseconds."
         )]
         timeout: u64,
