@@ -1,29 +1,79 @@
 #![no_std]
 #![no_main]
 
-use arduino_hal::prelude::*;
-use heapless::String;
+mod hex_instruction;
+mod driver;
 
+use crate::hex_instruction::HexInstruction;
+use arduino_hal::prelude::*;
+use arduino_hal::{pins, Peripherals};
+#[allow(unused_imports)]
 use panic_halt as _;
+
+const OK_INSTRUCTION: &'static str = "Y";
+const RESEND_INSTRUCTION: &'static str = "R";
 
 #[arduino_hal::entry]
 fn main() -> ! {
-    let dp = arduino_hal::Peripherals::take().unwrap();
-    let pins = arduino_hal::pins!(dp);
+    let dp = Peripherals::take().unwrap();
+    let pins = pins!(dp);
     let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    ufmt::uwriteln!(&mut serial, "Programmer ready!\r").unwrap_infallible();
+    let mut led = pins.d13.into_output();
 
-    let mut buffer: String<32> = String::new();
+    ufmt::uwrite!(&mut serial, "Programmer ready!").unwrap_infallible();
+
+    let mut finished_programming = false;
+
 
     loop {
-        if let Ok(byte) = serial.read() {
-            buffer.push(byte as char).unwrap_or_default();
+        if finished_programming {
+            led.toggle();
+            arduino_hal::delay_ms(1000);
+            continue;
+        }
 
-            if byte == b'\n' {
-                ufmt::uwriteln!(&mut serial, "Got: {}\r", buffer.as_str()).unwrap_infallible();
-                buffer.clear();
+        // TODO: initialize PIC microcontroller
+        let mut current_instruction = HexInstruction::new();
+        if let Ok(_) = serial.read() {
+            // ignore START CODE ':'
+        }
+        if let Ok(byte) = serial.read() {
+            current_instruction.byte_count = byte;
+        }
+
+        if let Ok(byte) = serial.read() {
+            current_instruction.address = byte as u16;
+        }
+        if let Ok(byte) = serial.read() {
+            current_instruction.address = (current_instruction.address << 2) | byte as u16;
+        }
+
+        if let Ok(byte) = serial.read() {
+            current_instruction.record_type = byte;
+        }
+
+        for index in 0..current_instruction.byte_count {
+            if let Ok(byte) = serial.read() {
+                current_instruction.data[index as usize] = byte;
             }
         }
+
+        if let Ok(byte) = serial.read() {
+            current_instruction.checksum = byte;
+        }
+
+        if current_instruction.check_end_of_file() {
+            finished_programming = true;
+            continue;
+        }
+
+        if current_instruction.verify_checksum() {
+            ufmt::uwrite!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
+        } else {
+            ufmt::uwrite!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
+        }
+
+        // TODO: write instruction to PIC microcontroller
     }
 }
