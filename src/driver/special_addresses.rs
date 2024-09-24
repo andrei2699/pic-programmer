@@ -1,0 +1,5 @@
+pub const OSCCAL_ADDRESS: u16 = 0x0FF;
+pub const BACKUP_OSCCAL_ADDRESS: u16 = 0x104;
+pub const USER_ID_FIRST_ADDRESS: u16 = 0x100;
+pub const CONFIGURATION_WORD_ADDRESS: u16 = 0x1FF;
+pub const ADDRESS_SIZE: u16 = 0x200;
