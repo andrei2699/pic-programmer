@@ -5,11 +5,11 @@ mod hex_instruction;
 mod driver;
 mod state;
 
-use crate::state::States;
 use crate::driver::operations::ProgramMemory;
 use crate::driver::programmer::Programmer;
 use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use crate::hex_instruction::HexInstruction;
+use crate::state::States;
 use arduino_hal::hal::port::PB1;
 use arduino_hal::hal::{Atmega, Usart};
 use arduino_hal::pac::TC1;
@@ -22,8 +22,8 @@ use arduino_hal::{pins, Peripherals};
 #[allow(unused_imports)]
 use panic_halt as _;
 
-const OK_INSTRUCTION: &'static str = "Y";
-const RESEND_INSTRUCTION: &'static str = "R";
+const OK_INSTRUCTION: u8 = b'Y';
+const RESEND_INSTRUCTION: u8 = b'R';
 const PROGRAM_INSTRUCTION: u8 = b'P';
 const DEFAULT_CONFIGURATION: u16 = 0xFF;
 const DEFAULT_USER_ID: u16 = 0xAA;
