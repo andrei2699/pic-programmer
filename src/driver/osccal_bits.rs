@@ -28,11 +28,10 @@ impl Programmer {
     pub fn restore_osccal_bits(&mut self) {
         self.enter_programming_mode();
 
-        self.goto_to_address(OSCCAL_ADDRESS);
         // should write the osccal bits as the operand of a MOVLWF instruction
         // 1100 kkkk kkkk
         let data: u16 = (0b1100 << 8) | self.osccal_bits.bits as u16;
-        self.program(data);
+        self.program(OSCCAL_ADDRESS, data);
 
         self.goto_to_address(BACKUP_OSCCAL_ADDRESS);
         self.load_data(self.osccal_bits.backup_bits as u16);

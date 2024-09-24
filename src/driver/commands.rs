@@ -125,4 +125,11 @@ impl Programmer {
         self.send_command(BULK_ERASE_COMMAND);
         arduino_hal::delay_ms(T_ERA.to_millis() as u16);
     }
+
+    #[inline]
+    pub fn goto_to_address(&mut self, address: u16) {
+        while self.current_address != address {
+            self.increment_address();
+        }
+    }
 }

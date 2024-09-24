@@ -3,9 +3,12 @@
 
 mod hex_instruction;
 mod driver;
+mod state;
 
+use crate::state::States;
 use crate::driver::operations::ProgramMemory;
 use crate::driver::programmer::Programmer;
+use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use crate::hex_instruction::HexInstruction;
 use arduino_hal::hal::port::PB1;
 use arduino_hal::hal::{Atmega, Usart};
@@ -21,6 +24,9 @@ use panic_halt as _;
 
 const OK_INSTRUCTION: &'static str = "Y";
 const RESEND_INSTRUCTION: &'static str = "R";
+const PROGRAM_INSTRUCTION: u8 = b'P';
+const DEFAULT_CONFIGURATION: u16 = 0xFF;
+const DEFAULT_USER_ID: u16 = 0xAA;
 
 #[arduino_hal::entry]
 fn main() -> ! {
@@ -42,31 +48,46 @@ fn main() -> ! {
 
     ufmt::uwrite!(&mut serial, "Programmer ready!").unwrap_infallible();
 
-    let mut finished_programming = false;
+    let mut state = States::WaitingToStart;
+    let mut config = DEFAULT_CONFIGURATION;
+    let mut user_id = DEFAULT_USER_ID;
 
     loop {
-        if finished_programming {
-            led.toggle();
-            arduino_hal::delay_ms(1000);
-            continue;
+        match state {
+            States::Finished => {
+                led.toggle();
+                arduino_hal::delay_ms(1000);
+            }
+            States::WaitingToStart => {
+                if let Ok(byte) = serial.read() {
+                    if byte == PROGRAM_INSTRUCTION {
+                        state = States::Program;
+                        programmer.start_programming();
+                    }
+                }
+            }
+            States::Program => {
+                let current_instruction = parse_instruction(&mut serial);
+
+                if current_instruction.check_end_of_file() {
+                    state = States::Finished;
+                    programmer.stop_programming(config, user_id);
+                    continue;
+                } else if current_instruction.address == USER_ID_FIRST_ADDRESS {
+                    user_id = current_instruction.data & 0xFF;
+                } else if current_instruction.address == CONFIGURATION_WORD_ADDRESS {
+                    config = current_instruction.data & 0xFF;
+                }
+
+                if current_instruction.verify_checksum() {
+                    ufmt::uwrite!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
+                } else {
+                    ufmt::uwrite!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
+                }
+
+                programmer.program(current_instruction.address, current_instruction.data)
+            }
         }
-
-        // TODO: initialize PIC microcontroller
-
-        let current_instruction = parse_instruction(&mut serial);
-
-        if current_instruction.check_end_of_file() {
-            finished_programming = true;
-            continue;
-        }
-
-        if current_instruction.verify_checksum() {
-            ufmt::uwrite!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
-        } else {
-            ufmt::uwrite!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
-        }
-
-        // TODO: write instruction to PIC microcontroller
     }
 }
 
@@ -93,9 +114,10 @@ where
         current_instruction.record_type = byte;
     }
 
-    for index in 0..current_instruction.byte_count {
+    current_instruction.data = 0;
+    for _ in 0..current_instruction.byte_count {
         if let Ok(byte) = serial.read() {
-            current_instruction.data[index as usize] = byte;
+            current_instruction.data = (current_instruction.data << 1) | byte as u16;
         }
     }
 
