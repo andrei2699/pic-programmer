@@ -42,7 +42,6 @@ fn main() -> ! {
 
     let mut finished_programming = false;
 
-
     loop {
         if finished_programming {
             led.toggle();

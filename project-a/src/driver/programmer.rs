@@ -42,6 +42,13 @@ impl ProgramMemory for Programmer {
         self.bulk_erase_program_memory();
     }
 
+    #[inline]
+    fn goto_to_address(&mut self, address: u16) {
+        while self.current_address != address {
+            self.increment_address();
+        }
+    }
+
     fn program(&mut self, data: u16) {
         self.load_data(data);
         self.begin_programming();
@@ -58,11 +65,9 @@ impl ProgramMemory for Programmer {
 impl Programmer {
     fn program_configuration(&mut self, config: u8, user_id: u8) {
         self.enter_programming_mode();
+        self.goto_to_address(CONFIGURATION_WORD_ADDRESS);
         self.program(config as u16);
-
-        while self.current_address != USER_ID_FIRST_ADDRESS {
-            self.increment_address();
-        }
+        self.goto_to_address(USER_ID_FIRST_ADDRESS);
         self.program(user_id as u16);
         self.exit_programming_mode();
     }
