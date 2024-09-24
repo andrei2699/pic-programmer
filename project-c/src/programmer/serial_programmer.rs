@@ -7,8 +7,9 @@ use std::str;
 
 const READY_MESSAGE: &'static str = "Programmer ready!";
 const END_OF_FILE: &'static str = ":00000001FF";
-const OK_INSTRUCTION: &'static str = "Y";
-const RESEND_INSTRUCTION: &'static str = "R";
+const OK_INSTRUCTION: u8 = b'Y';
+const RESEND_INSTRUCTION: u8 = b'R';
+const PROGRAM_INSTRUCTION: u8 = b'P';
 
 pub struct SerialProgrammer<R: ReadSerial, W: WriteSerial> {
     reader: R,
@@ -42,6 +43,9 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 
     fn send_lines(&mut self, port: &mut Box<dyn SerialPort>, lines: Lines<BufReader<File>>) {
         let mut received_data = String::new();
+        let mut programming_message_sent = false;
+        let ok_instruction_string = &OK_INSTRUCTION.to_string();
+        let resend_instruction_string = &RESEND_INSTRUCTION.to_string();
 
         'lines: for line in lines {
             let string = line.unwrap();
@@ -51,15 +55,21 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
             }
 
             received_data.clear();
-            while !received_data.contains(OK_INSTRUCTION) {
-                self.writer.write(port, trimmed_line);
+            while !received_data.contains(ok_instruction_string) {
+                if !programming_message_sent {
+                    self.writer.write(port, &PROGRAM_INSTRUCTION.to_be_bytes());
+                    programming_message_sent = true;
+                }
+
+                self.writer.write(port, trimmed_line.as_bytes());
 
                 if trimmed_line.contains(END_OF_FILE) {
                     break 'lines;
                 }
 
+                println!("temp {}", received_data);
                 self.reader.read(port, &mut received_data);
-                if received_data.contains(RESEND_INSTRUCTION) {
+                if received_data.contains(resend_instruction_string) {
                     println!("resending instruction {}", trimmed_line);
                     received_data.clear();
                 }
@@ -128,7 +138,8 @@ mod test {
 
         programmer.program(&mut port, lines);
 
-        assert_eq!(programmer.writer.data[0], END_OF_FILE);
+        assert_eq!(programmer.writer.data[0], "P");
+        assert_eq!(programmer.writer.data[1], END_OF_FILE);
     }
 
     #[test]
@@ -141,7 +152,8 @@ mod test {
 
         programmer.program(&mut port, lines);
 
-        assert_eq!(programmer.writer.data[0], END_OF_FILE);
+        assert_eq!(programmer.writer.data[0], "P");
+        assert_eq!(programmer.writer.data[1], END_OF_FILE);
     }
 
     #[test]
@@ -149,8 +161,8 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
-                String::from(OK_INSTRUCTION),
-                String::from(OK_INSTRUCTION)
+                OK_INSTRUCTION.to_string(),
+                OK_INSTRUCTION.to_string()
             ],
             index: 0,
         };
@@ -161,9 +173,10 @@ mod test {
 
         programmer.program(&mut port, lines);
 
-        assert_eq!(programmer.writer.data[0], ":02002400BE1C");
-        assert_eq!(programmer.writer.data[1], ":02002500BE1B");
-        assert_eq!(programmer.writer.data[2], END_OF_FILE);
+        assert_eq!(programmer.writer.data[0], "P");
+        assert_eq!(programmer.writer.data[1], ":02002400BE1C");
+        assert_eq!(programmer.writer.data[2], ":02002500BE1B");
+        assert_eq!(programmer.writer.data[3], END_OF_FILE);
     }
 
     #[test]
@@ -171,9 +184,9 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
-                String::from(RESEND_INSTRUCTION),
-                String::from(OK_INSTRUCTION),
-                String::from(OK_INSTRUCTION)
+                RESEND_INSTRUCTION.to_string(),
+                OK_INSTRUCTION.to_string(),
+                OK_INSTRUCTION.to_string()
             ],
             index: 0,
         };
@@ -184,10 +197,11 @@ mod test {
 
         programmer.program(&mut port, lines);
 
-        assert_eq!(programmer.writer.data[0], ":02002400BE1C");
+        assert_eq!(programmer.writer.data[0], "P");
         assert_eq!(programmer.writer.data[1], ":02002400BE1C");
-        assert_eq!(programmer.writer.data[2], ":02002500BE1B");
-        assert_eq!(programmer.writer.data[3], END_OF_FILE);
+        assert_eq!(programmer.writer.data[2], ":02002400BE1C");
+        assert_eq!(programmer.writer.data[3], ":02002500BE1B");
+        assert_eq!(programmer.writer.data[4], END_OF_FILE);
     }
 
     struct ReaderTest {
@@ -208,8 +222,8 @@ mod test {
     }
 
     impl WriteSerial for WriterTest {
-        fn write(&mut self, _port: &mut Box<dyn SerialPort>, string: &str) {
-            self.data.push(string.to_string())
+        fn write(&mut self, _port: &mut Box<dyn SerialPort>, buffer: &[u8]) {
+            self.data.push(String::from_utf8_lossy(buffer).to_string())
         }
     }
 
