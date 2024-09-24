@@ -4,8 +4,15 @@
 mod hex_instruction;
 mod driver;
 
+use crate::driver::operations::ProgramMemory;
+use crate::driver::programmer::Programmer;
 use crate::hex_instruction::HexInstruction;
+use arduino_hal::hal::port::PB1;
+use arduino_hal::pac::TC1;
+use arduino_hal::port::mode::{Floating, Input};
+use arduino_hal::port::Pin;
 use arduino_hal::prelude::*;
+use arduino_hal::simple_pwm::*;
 use arduino_hal::{pins, Peripherals};
 #[allow(unused_imports)]
 use panic_halt as _;
@@ -20,6 +27,16 @@ fn main() -> ! {
     let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
 
     let mut led = pins.d13.into_output();
+
+    let mut programmer = Programmer::new(
+        pins.d6.into_output(),
+        pins.d3.into_output(),
+        pins.d4.into_output(),
+        pins.d5.into_output(),
+    );
+
+    programmer.init();
+    setup_pwm_for_12v_charge_pump(dp.TC1, pins.d9);
 
     ufmt::uwrite!(&mut serial, "Programmer ready!").unwrap_infallible();
 
@@ -76,4 +93,12 @@ fn main() -> ! {
 
         // TODO: write instruction to PIC microcontroller
     }
+}
+
+fn setup_pwm_for_12v_charge_pump(tc1: TC1, pwm_pin: Pin<Input<Floating>, PB1>) {
+    let timer1 = Timer1Pwm::new(tc1, Prescaler::Prescale8);
+
+    let mut pin = pwm_pin.into_output().into_pwm(&timer1);
+    pin.enable();
+    pin.set_duty(127);
 }
