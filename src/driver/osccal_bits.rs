@@ -11,16 +11,10 @@ impl Programmer {
     pub fn read_and_save_osccal_bits(&mut self) {
         self.enter_programming_mode();
 
-        while self.current_address != OSCCAL_ADDRESS {
-            self.increment_address();
-        }
-
+        self.goto_to_address(OSCCAL_ADDRESS);
         let bits = self.read_data();
 
-        while self.current_address != BACKUP_OSCCAL_ADDRESS {
-            self.increment_address();
-        }
-
+        self.goto_to_address(BACKUP_OSCCAL_ADDRESS);
         let backup_bits = self.read_data();
 
         self.exit_programming_mode();
@@ -34,19 +28,13 @@ impl Programmer {
     pub fn restore_osccal_bits(&mut self) {
         self.enter_programming_mode();
 
-        while self.current_address != OSCCAL_ADDRESS {
-            self.increment_address()
-        }
-
+        self.goto_to_address(OSCCAL_ADDRESS);
         // should write the osccal bits as the operand of a MOVLWF instruction
         // 1100 kkkk kkkk
         let data: u16 = (0b1100 << 8) | self.osccal_bits.bits as u16;
         self.program(data);
 
-        while self.current_address != BACKUP_OSCCAL_ADDRESS {
-            self.increment_address();
-        }
-
+        self.goto_to_address(BACKUP_OSCCAL_ADDRESS);
         self.load_data(self.osccal_bits.backup_bits as u16);
 
         self.exit_programming_mode()
