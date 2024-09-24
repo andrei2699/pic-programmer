@@ -8,11 +8,13 @@ use crate::driver::operations::ProgramMemory;
 use crate::driver::programmer::Programmer;
 use crate::hex_instruction::HexInstruction;
 use arduino_hal::hal::port::PB1;
+use arduino_hal::hal::{Atmega, Usart};
 use arduino_hal::pac::TC1;
 use arduino_hal::port::mode::{Floating, Input};
 use arduino_hal::port::Pin;
 use arduino_hal::prelude::*;
 use arduino_hal::simple_pwm::*;
+use arduino_hal::usart::UsartOps;
 use arduino_hal::{pins, Peripherals};
 #[allow(unused_imports)]
 use panic_halt as _;
@@ -50,34 +52,8 @@ fn main() -> ! {
         }
 
         // TODO: initialize PIC microcontroller
-        let mut current_instruction = HexInstruction::new();
-        if let Ok(_) = serial.read() {
-            // ignore START CODE ':'
-        }
-        if let Ok(byte) = serial.read() {
-            current_instruction.byte_count = byte;
-        }
 
-        if let Ok(byte) = serial.read() {
-            current_instruction.address = byte as u16;
-        }
-        if let Ok(byte) = serial.read() {
-            current_instruction.address = (current_instruction.address << 2) | byte as u16;
-        }
-
-        if let Ok(byte) = serial.read() {
-            current_instruction.record_type = byte;
-        }
-
-        for index in 0..current_instruction.byte_count {
-            if let Ok(byte) = serial.read() {
-                current_instruction.data[index as usize] = byte;
-            }
-        }
-
-        if let Ok(byte) = serial.read() {
-            current_instruction.checksum = byte;
-        }
+        let current_instruction = parse_instruction(&mut serial);
 
         if current_instruction.check_end_of_file() {
             finished_programming = true;
@@ -92,6 +68,41 @@ fn main() -> ! {
 
         // TODO: write instruction to PIC microcontroller
     }
+}
+
+fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>) -> HexInstruction
+where
+    USART: UsartOps<Atmega, RX, TX>,
+{
+    let mut current_instruction = HexInstruction::new();
+    if let Ok(_) = serial.read() {
+        // ignore START CODE ':'
+    }
+    if let Ok(byte) = serial.read() {
+        current_instruction.byte_count = byte;
+    }
+
+    if let Ok(byte) = serial.read() {
+        current_instruction.address = byte as u16;
+    }
+    if let Ok(byte) = serial.read() {
+        current_instruction.address = (current_instruction.address << 2) | byte as u16;
+    }
+
+    if let Ok(byte) = serial.read() {
+        current_instruction.record_type = byte;
+    }
+
+    for index in 0..current_instruction.byte_count {
+        if let Ok(byte) = serial.read() {
+            current_instruction.data[index as usize] = byte;
+        }
+    }
+
+    if let Ok(byte) = serial.read() {
+        current_instruction.checksum = byte;
+    }
+    current_instruction
 }
 
 fn setup_pwm_for_12v_charge_pump(tc1: TC1, pwm_pin: Pin<Input<Floating>, PB1>) {
