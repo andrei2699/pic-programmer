@@ -2,11 +2,7 @@
 
 A simple PIC Programmer made for Arduino
 
-[PIC10F200 Datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/40001239F.pdf)
-
-[PIC10F200 Memory Programming Specification](https://ww1.microchip.com/downloads/en/DeviceDoc/41228C.pdf)
-
-## Pin Layout
+### Circuit Diagram
 
 ### Arduino
 
@@ -19,6 +15,16 @@ A simple PIC Programmer made for Arduino
 ### PIC10F200 Pinout
 
 ![PIC10F200-pinout](assets/pin_layout_pic10f200.png)
+
+### Schematic
+
+![schematic](assets/schematic.png)
+
+### Datasheets
+
+- [PIC10F200 Datasheet](https://ww1.microchip.com/downloads/en/DeviceDoc/40001239F.pdf)
+- [PIC10F200 Memory Programming Specification](https://ww1.microchip.com/downloads/en/DeviceDoc/41228C.pdf)
+- [CNY17F-1 Optocoupler](https://ro.mouser.com/datasheet/2/239/CNY17F_SERIES_1115-1903833.pdf)
 
 ## Build Instructions
 
@@ -36,3 +42,8 @@ A simple PIC Programmer made for Arduino
 [`avr-hal` README]: https://github.com/Rahix/avr-hal#readme
 
 [`ravedude`]: https://crates.io/crates/ravedude
+
+## Resources
+
+- [DIYODE - Arduino based PIC Programmer](https://diyodemag.com/projects/arduino_pic_programmer)
+- [Charge Pump Circuit - Getting Higher Voltage from Low Voltage Source](https://circuitdigest.com/electronic-circuits/charge-pump-circuit-design)
