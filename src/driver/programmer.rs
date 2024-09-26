@@ -53,6 +53,7 @@ impl ProgramMemory for Programmer {
         self.exit_programming_mode();
         self.restore_osccal_bits();
         self.program_configuration(config, user_id);
+        self.init();
     }
 }
 
