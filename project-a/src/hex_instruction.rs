@@ -6,6 +6,18 @@ pub struct HexInstruction {
     pub record_type: u8,
     pub data: u16,
     pub checksum: u8,
+    pub state: HexInstructionReadState,
+}
+
+#[derive(PartialEq)]
+pub enum HexInstructionReadState {
+    Start,
+    ByteCount(u8),
+    Address(u8),
+    RecordType(u8),
+    Data(u8),
+    Checksum(u8),
+    Done,
 }
 
 impl HexInstruction {
@@ -16,19 +28,28 @@ impl HexInstruction {
             record_type: 0,
             data: 0,
             checksum: 0,
+            state: HexInstructionReadState::Start,
         }
     }
 
-    pub fn verify_checksum(&self) -> bool {
-        let mut sum: u8 = 0;
-        sum = sum.add(self.byte_count);
-        sum = sum.add(((self.address >> 2) & 0xFF) as u8);
-        sum = sum.add((self.address & 0xFF) as u8);
-        sum = sum.add(self.record_type);
-        sum = sum.add(((self.data >> 2) & 0xFF) as u8);
-        sum = sum.add((self.data & 0xFF) as u8);
+    pub fn init(&mut self) {
+        self.byte_count = 0;
+        self.address = 0;
+        self.record_type = 0;
+        self.data = 0;
+        self.checksum = 0;
+    }
 
-        let lsb = sum & 0xFF;
+    pub fn verify_checksum(&self) -> bool {
+        let mut sum: u16 = 0;
+        sum = sum.add(self.byte_count as u16);
+        sum = sum.add((self.address >> 8) & 0xFF);
+        sum = sum.add(self.address & 0xFF);
+        sum = sum.add(self.record_type as u16);
+        sum = sum.add((self.data >> 8) & 0xFF);
+        sum = sum.add(self.data & 0xFF);
+
+        let lsb = (sum & 0xFF) as u8;
         let checksum = (!lsb + 1) & 0xFF;
 
         checksum == self.checksum

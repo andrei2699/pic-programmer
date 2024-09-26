@@ -9,6 +9,7 @@ use crate::driver::operations::ProgramMemory;
 use crate::driver::programmer::Programmer;
 use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use crate::hex_instruction::HexInstruction;
+use crate::hex_instruction::HexInstructionReadState::{Address, ByteCount, Checksum, Data, Done, RecordType, Start};
 use crate::state::States;
 use arduino_hal::hal::port::PB1;
 use arduino_hal::hal::{Atmega, Usart};
@@ -51,6 +52,7 @@ fn main() -> ! {
     let mut state = States::WaitingToStart;
     let mut config = DEFAULT_CONFIGURATION;
     let mut user_id = DEFAULT_USER_ID;
+    let mut current_instruction = HexInstruction::new();
 
     loop {
         match state {
@@ -67,7 +69,12 @@ fn main() -> ! {
                 }
             }
             States::Program => {
-                let current_instruction = parse_instruction(&mut serial);
+                parse_instruction(&mut serial, &mut current_instruction);
+
+                if current_instruction.state != Done {
+                    continue;
+                }
+                current_instruction.state = Start;
 
                 if current_instruction.check_end_of_file() {
                     state = States::Finished;
@@ -91,40 +98,68 @@ fn main() -> ! {
     }
 }
 
-fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>) -> HexInstruction
+fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>, current_instruction: &mut HexInstruction)
 where
     USART: UsartOps<Atmega, RX, TX>,
 {
-    let mut current_instruction = HexInstruction::new();
-    if let Ok(_) = serial.read() {
-        // ignore START CODE ':'
-    }
     if let Ok(byte) = serial.read() {
-        current_instruction.byte_count = byte;
-    }
+        if byte == b'\r' || byte == b'\n' {
+            return;
+        }
 
-    if let Ok(byte) = serial.read() {
-        current_instruction.address = byte as u16;
-    }
-    if let Ok(byte) = serial.read() {
-        current_instruction.address = (current_instruction.address << 2) | byte as u16;
-    }
+        let byte = convert_byte_to_hexadecimal_if_possible(byte);
 
-    if let Ok(byte) = serial.read() {
-        current_instruction.record_type = byte;
-    }
-
-    current_instruction.data = 0;
-    for _ in 0..current_instruction.byte_count {
-        if let Ok(byte) = serial.read() {
-            current_instruction.data = (current_instruction.data << 1) | byte as u16;
+        match current_instruction.state {
+            Start => {
+                if byte == b':' {
+                    // ignore START CODE ':'
+                    current_instruction.init();
+                    current_instruction.state = ByteCount(2);
+                }
+            }
+            ByteCount(hex_digits_remaining) => {
+                if hex_digits_remaining > 1 {
+                    current_instruction.state = ByteCount(hex_digits_remaining - 1);
+                } else {
+                    current_instruction.state = Address(4);
+                }
+                current_instruction.byte_count = (current_instruction.byte_count) << 4 | byte;
+            }
+            Address(hex_digits_remaining) => {
+                if hex_digits_remaining > 1 {
+                    current_instruction.state = Address(hex_digits_remaining - 1)
+                } else {
+                    current_instruction.state = RecordType(2)
+                }
+                current_instruction.address = (current_instruction.address << 4) | byte as u16;
+            }
+            RecordType(hex_digits_remaining) => {
+                if hex_digits_remaining > 1 {
+                    current_instruction.state = RecordType(hex_digits_remaining - 1);
+                } else {
+                    current_instruction.state = Data(current_instruction.byte_count * 2);
+                }
+                current_instruction.record_type = (current_instruction.record_type) << 4 | byte;
+            }
+            Data(hex_digits_remaining) => {
+                if hex_digits_remaining > 1 {
+                    current_instruction.state = Data(hex_digits_remaining - 1);
+                } else {
+                    current_instruction.state = Checksum(2);
+                }
+                current_instruction.data = (current_instruction.data << 4) | byte as u16;
+            }
+            Checksum(hex_digits_remaining) => {
+                if hex_digits_remaining > 1 {
+                    current_instruction.state = Checksum(hex_digits_remaining - 1);
+                } else {
+                    current_instruction.state = Done;
+                }
+                current_instruction.checksum = (current_instruction.checksum) << 4 | byte;
+            }
+            Done => {}
         }
     }
-
-    if let Ok(byte) = serial.read() {
-        current_instruction.checksum = byte;
-    }
-    current_instruction
 }
 
 fn setup_pwm_for_12v_charge_pump(tc1: TC1, pwm_pin: Pin<Input<Floating>, PB1>) {
@@ -133,4 +168,13 @@ fn setup_pwm_for_12v_charge_pump(tc1: TC1, pwm_pin: Pin<Input<Floating>, PB1>) {
     let mut pin = pwm_pin.into_output().into_pwm(&timer1);
     pin.enable();
     pin.set_duty(127);
+}
+
+fn convert_byte_to_hexadecimal_if_possible(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => 10 + (byte - b'a'),
+        b'A'..=b'F' => 10 + (byte - b'A'),
+        _ => byte,
+    }
 }
