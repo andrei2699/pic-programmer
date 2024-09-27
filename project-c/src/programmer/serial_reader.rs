@@ -24,9 +24,10 @@ impl ReadSerial for SerialReader {
                 let content = &self.serial_buf[..bytes_read];
 
                 if let Ok(chunk) = str::from_utf8(content) {
+                    println!("[Programmer] raw data: '{}'", chunk);
                     received_data.push_str(chunk);
                 } else {
-                    panic!("unable to convert content to string")
+                    panic!("[CLI] unable to convert content to string")
                 }
             }
             Err(ref e) if e.kind() == io::ErrorKind::TimedOut => (),

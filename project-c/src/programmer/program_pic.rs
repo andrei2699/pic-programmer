@@ -10,7 +10,7 @@ use crate::programmer::serial_writer::SerialWriter;
 use std::time::Duration;
 
 pub fn program_pic(input_file_path: &String, port_name: &String, baud_rate: &u32, timeout: &u64) {
-    println!("sending file '{0}' to Arduino connected at {1} with baud rate {2}...", input_file_path, port_name, baud_rate);
+    println!("[CLI] sending file '{0}' to Arduino connected at {1} with baud rate {2}...", input_file_path, port_name, baud_rate);
     let baud_rate = *baud_rate;
     let timeout = *timeout;
 
@@ -19,12 +19,12 @@ pub fn program_pic(input_file_path: &String, port_name: &String, baud_rate: &u32
 
     match port {
         Ok(mut port) => {
-            println!("created connection data on {} at {} baud:", &port_name, &baud_rate);
+            println!("[CLI] created connection data on {} at {} baud:", &port_name, &baud_rate);
             let lines = get_lines(input_file_path);
             program(lines, &mut port);
         }
         Err(e) => {
-            eprintln!("Failed to open \"{}\". Error: {}", port_name, e);
+            eprintln!("[CLI] Failed to open \"{}\". Error: {}", port_name, e);
             std::process::exit(1);
         }
     }

@@ -6,6 +6,7 @@ use std::io::{BufReader, Lines};
 use std::str;
 
 const READY_MESSAGE: &'static str = "Programmer ready!";
+const PROGRAMMING_STARTED_MESSAGE: &'static str = "start";
 const END_OF_FILE: &'static str = ":00000001FF";
 const OK_INSTRUCTION: u8 = b'Y';
 const RESEND_INSTRUCTION: u8 = b'R';
@@ -22,20 +23,21 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
     }
 
     pub fn program(&mut self, port: &mut Box<dyn SerialPort>, lines: Lines<BufReader<File>>) {
-        self.wait_for_programmer_to_be_ready(port);
+        self.wait_for_programmer_message(port, READY_MESSAGE);
 
         self.send_lines(port, lines);
 
-        println!("finished programming!")
+        println!("[CLI] finished programming!")
     }
 
-    fn wait_for_programmer_to_be_ready(&mut self, port: &mut Box<dyn SerialPort>) {
+    fn wait_for_programmer_message(&mut self, port: &mut Box<dyn SerialPort>, message: &str) {
         let mut received_data = String::new();
+        println!("[CLI] waiting for programmer for '{}'....", message);
         loop {
             self.reader.read(port, &mut received_data);
 
-            if received_data.contains(READY_MESSAGE) {
-                println!("Programmer start message: {}", received_data);
+            if received_data.contains(message) {
+                println!("[Programmer]: '{}'", received_data);
                 break;
             }
         }
@@ -54,26 +56,43 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
                 continue;
             }
 
+            println!("[CLI] starting to write line: {}", trimmed_line);
+            if !programming_message_sent {
+                println!("[CLI] programming started");
+                self.writer.write(port, &PROGRAM_INSTRUCTION.to_be_bytes());
+                self.wait_for_programmer_message(port, PROGRAMMING_STARTED_MESSAGE);
+
+                programming_message_sent = true;
+            }
+
+            self.writer.write(port, trimmed_line.as_bytes());
+
             received_data.clear();
             while !received_data.contains(ok_instruction_string) {
-                if !programming_message_sent {
-                    self.writer.write(port, &PROGRAM_INSTRUCTION.to_be_bytes());
-                    programming_message_sent = true;
-                }
-
-                self.writer.write(port, trimmed_line.as_bytes());
-
                 if trimmed_line.contains(END_OF_FILE) {
                     break 'lines;
                 }
 
-                println!("temp {}", received_data);
+                println!("[CLI] received data: '{}'", received_data);
                 self.reader.read(port, &mut received_data);
                 if received_data.contains(resend_instruction_string) {
-                    println!("resending instruction {}", trimmed_line);
+                    println!("[CLI] resending instruction {}", trimmed_line);
+                    self.writer.write(port, trimmed_line.as_bytes());
                     received_data.clear();
                 }
+
+                if let Some(index) = received_data.find('\n') {
+                    let first_part = received_data[..index].to_string();
+                    let second_part = received_data[index + 1..].to_string();
+
+                    received_data = second_part;
+
+                    println!("[CLI] First part: {}", first_part);
+                    println!("[CLI] Remaining received_data: {}", received_data);
+                }
             }
+
+            println!("[CLI] finished writing line: {}", trimmed_line);
         }
     }
 }
@@ -81,7 +100,10 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 #[cfg(test)]
 mod test {
     use crate::programmer::file_reader::get_lines;
-    use crate::programmer::serial_programmer::{SerialProgrammer, END_OF_FILE, OK_INSTRUCTION, RESEND_INSTRUCTION};
+    use crate::programmer::serial_programmer::{
+        SerialProgrammer, END_OF_FILE, OK_INSTRUCTION, PROGRAMMING_STARTED_MESSAGE, READY_MESSAGE,
+        RESEND_INSTRUCTION,
+    };
     use crate::programmer::serial_reader::ReadSerial;
     use crate::programmer::serial_writer::WriteSerial;
     use crate::programmer::test_serial_port::TestSerialPort;
@@ -91,10 +113,21 @@ mod test {
 
     #[test]
     fn given_starting_message_in_multiple_chunks_and_empty_file_should_not_write_anything() {
-        let reader = ReaderTest { data: vec![String::from("Programmer "), String::from("ready"), String::from("!")], index: 0 };
+        let reader = ReaderTest {
+            data: vec![
+                String::from("Programmer "),
+                String::from("ready"),
+                String::from("!"),
+            ],
+            index: 0,
+        };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/empty-file.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/empty-file.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -104,10 +137,17 @@ mod test {
 
     #[test]
     fn given_all_starting_message_and_empty_file_should_not_write_anything() {
-        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let reader = ReaderTest {
+            data: vec![String::from("Programmer ready!")],
+            index: 0,
+        };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/empty-file.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/empty-file.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -117,10 +157,17 @@ mod test {
 
     #[test]
     fn given_file_with_multiple_blank_lines_should_not_write_anything() {
-        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let reader = ReaderTest {
+            data: vec![String::from("Programmer ready!")],
+            index: 0,
+        };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/empty-file.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/empty-file.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -130,10 +177,20 @@ mod test {
 
     #[test]
     fn given_file_with_only_eof_should_write_one_instruction() {
-        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let reader = ReaderTest {
+            data: vec![
+                String::from(READY_MESSAGE),
+                String::from(PROGRAMMING_STARTED_MESSAGE),
+            ],
+            index: 0,
+        };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/only-eof.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/only-eof.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -144,10 +201,20 @@ mod test {
 
     #[test]
     fn given_file_eof_at_the_beginning_should_write_one_instruction() {
-        let reader = ReaderTest { data: vec![String::from("Programmer ready!")], index: 0 };
+        let reader = ReaderTest {
+            data: vec![
+                String::from(READY_MESSAGE),
+                String::from(PROGRAMMING_STARTED_MESSAGE),
+            ],
+            index: 0,
+        };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/eof-at-the-beginning.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/eof-at-the-beginning.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -161,14 +228,19 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
+                String::from(PROGRAMMING_STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
-                OK_INSTRUCTION.to_string()
+                OK_INSTRUCTION.to_string(),
             ],
             index: 0,
         };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/multiple-instructions.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/multiple-instructions.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -180,19 +252,25 @@ mod test {
     }
 
     #[test]
-    fn given_file_with_one_instruction_sent_with_problems_should_retry_the_write_of_that_instruction() {
+    fn given_file_with_one_instruction_sent_with_problems_should_retry_the_write_of_that_instruction(
+    ) {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
+                String::from(PROGRAMMING_STARTED_MESSAGE),
                 RESEND_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
-                OK_INSTRUCTION.to_string()
+                OK_INSTRUCTION.to_string(),
             ],
             index: 0,
         };
         let writer = WriterTest { data: vec![] };
         let mut port: Box<dyn SerialPort> = Box::new(TestSerialPort {});
-        let lines = get_lines(&get_full_path("test-files/multiple-instructions.hex").to_string_lossy().to_string());
+        let lines = get_lines(
+            &get_full_path("test-files/multiple-instructions.hex")
+                .to_string_lossy()
+                .to_string(),
+        );
         let mut programmer = SerialProgrammer::new(reader, writer);
 
         programmer.program(&mut port, lines);
@@ -229,7 +307,9 @@ mod test {
 
     fn get_full_path(relative_path: &str) -> PathBuf {
         let current_dir = env::current_dir().expect("Failed to get current directory");
-        let full_path = current_dir.join(Path::new("src/programmer")).join(Path::new(relative_path));
+        let full_path = current_dir
+            .join(Path::new("src/programmer"))
+            .join(Path::new(relative_path));
         full_path
     }
 }
