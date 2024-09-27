@@ -22,7 +22,8 @@ impl ReadSerial for SerialReader {
                 let content = &self.serial_buf[..bytes_read];
 
                 if let Ok(chunk) = str::from_utf8(content) {
-                    println!("[Programmer] raw data: '{}'", chunk);
+                    // TODO: enable more logging with a debug option from cli
+                    // println!("[Programmer] raw data: '{}'", chunk);
                     received_data.push_str(chunk);
                 } else {
                     panic!("[CLI] unable to convert content to string")

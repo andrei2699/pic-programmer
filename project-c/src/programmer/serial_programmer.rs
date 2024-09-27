@@ -7,6 +7,7 @@ use std::str;
 
 const READY_MESSAGE: &'static str = "Programmer ready!";
 const PROGRAMMING_STARTED_MESSAGE: &'static str = "start";
+const DONE_MESSAGE: &'static str = "done";
 const END_OF_FILE: &'static str = ":00000001FF";
 const OK_INSTRUCTION: u8 = b'Y';
 const RESEND_INSTRUCTION: u8 = b'R';
@@ -49,14 +50,13 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
         let ok_instruction_string = &OK_INSTRUCTION.to_string();
         let resend_instruction_string = &RESEND_INSTRUCTION.to_string();
 
-        'lines: for line in lines {
+        for line in lines {
             let string = line.unwrap();
             let trimmed_line = string.trim();
             if trimmed_line.is_empty() {
                 continue;
             }
 
-            println!("[CLI] starting to write line: {}", trimmed_line);
             if !programming_message_sent {
                 println!("[CLI] programming started");
                 self.writer.write(port, &PROGRAM_INSTRUCTION.to_be_bytes());
@@ -67,32 +67,29 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 
             self.writer.write(port, trimmed_line.as_bytes());
 
+            let mut instruction_sent_correctly = false;
             received_data.clear();
-            while !received_data.contains(ok_instruction_string) {
-                if trimmed_line.contains(END_OF_FILE) {
-                    break 'lines;
-                }
-
-                println!("[CLI] received data: '{}'", received_data);
+            while !instruction_sent_correctly {
                 self.reader.read(port, &mut received_data);
+                println!("[Programmer] received data: '{}'", received_data);
+
                 if received_data.contains(resend_instruction_string) {
                     println!("[CLI] resending instruction {}", trimmed_line);
                     self.writer.write(port, trimmed_line.as_bytes());
                     received_data.clear();
-                }
-
-                if let Some(index) = received_data.find('\n') {
-                    let first_part = received_data[..index].to_string();
-                    let second_part = received_data[index + 1..].to_string();
-
-                    received_data = second_part;
-
-                    println!("[CLI] First part: {}", first_part);
-                    println!("[CLI] Remaining received_data: {}", received_data);
+                } else if received_data.contains(ok_instruction_string) {
+                    instruction_sent_correctly = true;
                 }
             }
 
-            println!("[CLI] finished writing line: {}", trimmed_line);
+            if trimmed_line.contains(END_OF_FILE) {
+                println!("[CLI] end of file reached {}", trimmed_line);
+                break;
+            }
+        }
+
+        if programming_message_sent {
+            self.wait_for_programmer_message(port, DONE_MESSAGE);
         }
     }
 }
@@ -101,8 +98,8 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 mod test {
     use crate::programmer::file_reader::get_lines;
     use crate::programmer::serial_programmer::{
-        SerialProgrammer, END_OF_FILE, OK_INSTRUCTION, PROGRAMMING_STARTED_MESSAGE, READY_MESSAGE,
-        RESEND_INSTRUCTION,
+        SerialProgrammer, DONE_MESSAGE, END_OF_FILE, OK_INSTRUCTION, PROGRAMMING_STARTED_MESSAGE,
+        READY_MESSAGE, RESEND_INSTRUCTION,
     };
     use crate::programmer::serial_reader::ReadSerial;
     use crate::programmer::serial_writer::WriteSerial;
@@ -181,6 +178,7 @@ mod test {
             data: vec![
                 String::from(READY_MESSAGE),
                 String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(DONE_MESSAGE),
             ],
             index: 0,
         };
@@ -205,6 +203,7 @@ mod test {
             data: vec![
                 String::from(READY_MESSAGE),
                 String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(DONE_MESSAGE),
             ],
             index: 0,
         };
@@ -231,6 +230,7 @@ mod test {
                 String::from(PROGRAMMING_STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
+                String::from(DONE_MESSAGE),
             ],
             index: 0,
         };
@@ -261,6 +261,7 @@ mod test {
                 RESEND_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
+                String::from(DONE_MESSAGE),
             ],
             index: 0,
         };
