@@ -1,5 +1,6 @@
 pub enum States {
     WaitingToStart,
     Program,
-    Finished
+    ReadContents,
+    Finished,
 }

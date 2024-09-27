@@ -1,4 +1,4 @@
-use crate::driver::operations::ProgramMemory;
+use crate::driver::operations::{InitProgrammer, MemoryData, ProgramMemory, ReadMemory};
 use crate::driver::osccal_bits::OSCCALBits;
 use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use arduino_hal::hal::port::{PD3, PD4, PD5, PD6};
@@ -15,26 +15,36 @@ pub struct Programmer {
 }
 
 impl Programmer {
-    pub fn new(vpp: Pin<Output, PD6>, vdd: Pin<Output, PD3>, clock: Pin<Output, PD4>, data: Pin<Output, PD5>) -> Programmer {
+    pub fn new(
+        vpp: Pin<Output, PD6>,
+        vdd: Pin<Output, PD3>,
+        clock: Pin<Output, PD4>,
+        data: Pin<Output, PD5>,
+    ) -> Programmer {
         Programmer {
             vpp,
             vdd,
             clock,
             data: Some(data),
             current_address: CONFIGURATION_WORD_ADDRESS,
-            osccal_bits: OSCCALBits { bits: 0, backup_bits: 0 },
+            osccal_bits: OSCCALBits {
+                bits: 0,
+                backup_bits: 0,
+            },
         }
     }
 }
 
-impl ProgramMemory for Programmer {
+impl InitProgrammer for Programmer {
     fn init(&mut self) {
         self.vpp.set_low();
         self.vdd.set_low();
         self.clock.set_low();
         self.data.as_mut().unwrap().set_low();
     }
+}
 
+impl ProgramMemory for Programmer {
     fn start_programming(&mut self) {
         self.read_and_save_osccal_bits();
         self.enter_programming_mode();
@@ -53,6 +63,26 @@ impl ProgramMemory for Programmer {
         self.exit_programming_mode();
         self.restore_osccal_bits();
         self.program_configuration(config, user_id);
+        self.init();
+    }
+}
+
+impl ReadMemory for Programmer {
+    fn start_reading(&mut self) {
+        self.enter_programming_mode();
+    }
+
+    fn read(&mut self) -> MemoryData {
+        let data = self.read_data();
+
+        MemoryData {
+            address: self.current_address,
+            data,
+        }
+    }
+
+    fn stop_reading(&mut self) {
+        self.exit_programming_mode();
         self.init();
     }
 }
