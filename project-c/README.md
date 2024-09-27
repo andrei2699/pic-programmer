@@ -15,3 +15,24 @@ Each line of the hex file is sent until the end of file or `end of file instruct
 
 After each line, the programmer will send either `Y` if the instruction was read successfully with the checksum
 verification or `R` if the last instruction needs to be resent
+
+## CLI Commands
+
+### List Ports
+
+```shell
+pic-programmer-cli.exe list-ports
+```
+
+### Program
+
+```shell
+pic-programmer-cli.exe program -i "file.hex" -p COM5
+```
+
+#### Arguments
+
+- `-i` or `--input-file-path` - File path to hex file that needs to be programmed.
+- `-p` or `--port-name` - Port name to use (e.g., COM3).
+- `-b` or `--baud-rate` - Baud rate for the connection. [default: 57600]
+- `-t` or `--timeout` - Serial port connection timeout in milliseconds. [default: 5000]

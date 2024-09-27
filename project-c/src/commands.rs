@@ -14,7 +14,7 @@ pub enum Commands {
         #[arg(
             short,
             long,
-            help = "File path to hex file that needs to be programmed"
+            help = "File path to hex file that needs to be programmed."
         )]
         input_file_path: String,
 
