@@ -6,12 +6,13 @@ use std::io::{BufReader, Lines};
 use std::str;
 
 const READY_MESSAGE: &'static str = "Programmer ready!";
-const PROGRAMMING_STARTED_MESSAGE: &'static str = "start";
+const STARTED_MESSAGE: &'static str = "start";
 const DONE_MESSAGE: &'static str = "done";
 const END_OF_FILE: &'static str = ":00000001FF";
 const OK_INSTRUCTION: u8 = b'Y';
 const RESEND_INSTRUCTION: u8 = b'R';
 const PROGRAM_INSTRUCTION: u8 = b'P';
+const READ_STORED_PROGRAM_INSTRUCTION: u8 = b'D';
 
 pub struct SerialProgrammer<R: ReadSerial, W: WriteSerial> {
     reader: R,
@@ -29,21 +30,41 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
     }
 
     pub fn program(&mut self, port: &mut Box<dyn SerialPort>, lines: Lines<BufReader<File>>) {
-        self.wait_for_programmer_message(port, READY_MESSAGE);
+        self.wait_for_programmer_message(port, READY_MESSAGE, &mut String::new());
 
         self.send_lines(port, lines);
 
         println!("[CLI] finished programming!")
     }
 
-    fn wait_for_programmer_message(&mut self, port: &mut Box<dyn SerialPort>, message: &str) {
+    pub fn read(&mut self, port: &mut Box<dyn SerialPort>) {
+        self.wait_for_programmer_message(port, READY_MESSAGE, &mut String::new());
+
+        self.read_contents(port);
+
+        println!("[CLI] finished reading contents!")
+    }
+
+    fn wait_for_programmer_message(
+        &mut self,
+        port: &mut Box<dyn SerialPort>,
+        message: &str,
+        rest_data: &mut String,
+    ) {
         let mut received_data = String::new();
         println!("[CLI] waiting for programmer for '{}'....", message);
         loop {
             self.reader.read(port, &mut received_data);
 
             if received_data.contains(message) {
-                println!("[Programmer]: '{}'", received_data);
+                if let Some(index) = received_data.find('\n') {
+                    let content = received_data[..index].to_string();
+                    *rest_data = received_data[index + 1..].to_string();
+                    println!("[Programmer]: '{}'", content);
+                } else {
+                    println!("[Programmer]: '{}'", received_data);
+                }
+
                 break;
             }
         }
@@ -65,7 +86,7 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
             if !programming_message_sent {
                 println!("[CLI] programming started");
                 self.writer.write(port, &PROGRAM_INSTRUCTION.to_be_bytes());
-                self.wait_for_programmer_message(port, PROGRAMMING_STARTED_MESSAGE);
+                self.wait_for_programmer_message(port, STARTED_MESSAGE, &mut received_data);
 
                 programming_message_sent = true;
             }
@@ -97,7 +118,32 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
         }
 
         if programming_message_sent {
-            self.wait_for_programmer_message(port, DONE_MESSAGE);
+            self.wait_for_programmer_message(port, DONE_MESSAGE, &mut received_data);
+        }
+    }
+
+    fn read_contents(&mut self, port: &mut Box<dyn SerialPort>) {
+        let mut received_data = String::new();
+        println!("[CLI] read started");
+        self.writer
+            .write(port, &READ_STORED_PROGRAM_INSTRUCTION.to_be_bytes());
+        self.wait_for_programmer_message(port, STARTED_MESSAGE, &mut received_data);
+
+        'read_loop: loop {
+            while let Some(index) = received_data.find('\n') {
+                let content = received_data[..index].to_string();
+                let second_part = received_data[index + 1..].to_string();
+
+                received_data = second_part;
+
+                println!("[Programmer]: {}", content);
+
+                if received_data.contains(DONE_MESSAGE) || content.contains(DONE_MESSAGE) {
+                    break 'read_loop;
+                }
+            }
+
+            self.reader.read(port, &mut received_data);
         }
     }
 }
@@ -106,8 +152,8 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
 mod test {
     use crate::programmer::file_reader::get_lines;
     use crate::programmer::serial_programmer::{
-        SerialProgrammer, DONE_MESSAGE, END_OF_FILE, OK_INSTRUCTION, PROGRAMMING_STARTED_MESSAGE,
-        READY_MESSAGE, RESEND_INSTRUCTION,
+        SerialProgrammer, DONE_MESSAGE, END_OF_FILE, OK_INSTRUCTION, READY_MESSAGE,
+        RESEND_INSTRUCTION, STARTED_MESSAGE,
     };
     use crate::programmer::serial_reader::ReadSerial;
     use crate::programmer::serial_writer::WriteSerial;
@@ -185,7 +231,7 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from(READY_MESSAGE),
-                String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
@@ -211,7 +257,7 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from(READY_MESSAGE),
-                String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
@@ -237,7 +283,7 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
-                String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
@@ -268,7 +314,7 @@ mod test {
         let reader = ReaderTest {
             data: vec![
                 String::from("Programmer ready!"),
-                String::from(PROGRAMMING_STARTED_MESSAGE),
+                String::from(STARTED_MESSAGE),
                 RESEND_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),

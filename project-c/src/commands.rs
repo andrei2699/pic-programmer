@@ -40,4 +40,27 @@ pub enum Commands {
         #[arg(short, long, default_value_t = false, help = "Prints more content.")]
         verbose: bool,
     },
+    PrintProgram {
+        #[arg(short, long, help = "Port name to use (e.g., COM3).")]
+        port_name: String,
+
+        #[arg(
+            short,
+            long,
+            default_value_t = 57600,
+            help = "Baud rate for the connection."
+        )]
+        baud_rate: u32,
+
+        #[arg(
+            short,
+            long,
+            default_value_t = 5000,
+            help = "Serial port connection timeout in milliseconds."
+        )]
+        timeout: u64,
+
+        #[arg(short, long, default_value_t = false, help = "Prints more content.")]
+        verbose: bool,
+    },
 }
