@@ -36,5 +36,8 @@ pub enum Commands {
             help = "Serial port connection timeout in milliseconds."
         )]
         timeout: u64,
+
+        #[arg(short, long, default_value_t = false, help = "Prints more content.")]
+        verbose: bool,
     },
 }

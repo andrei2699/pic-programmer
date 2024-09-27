@@ -3,6 +3,7 @@ use std::{io, str};
 
 pub struct SerialReader {
     serial_buf: Vec<u8>,
+    verbose: bool,
 }
 
 pub trait ReadSerial {
@@ -10,8 +11,11 @@ pub trait ReadSerial {
 }
 
 impl SerialReader {
-    pub fn new(serial_buf: Vec<u8>) -> SerialReader {
-        SerialReader { serial_buf }
+    pub fn new(serial_buf: Vec<u8>, verbose: bool) -> SerialReader {
+        SerialReader {
+            serial_buf,
+            verbose,
+        }
     }
 }
 
@@ -22,8 +26,9 @@ impl ReadSerial for SerialReader {
                 let content = &self.serial_buf[..bytes_read];
 
                 if let Ok(chunk) = str::from_utf8(content) {
-                    // TODO: enable more logging with a debug option from cli
-                    // println!("[Programmer] raw data: '{}'", chunk);
+                    if self.verbose {
+                        println!("[Programmer] raw data: '{}'", chunk);
+                    }
                     received_data.push_str(chunk);
                 } else {
                     panic!("[CLI] unable to convert content to string")

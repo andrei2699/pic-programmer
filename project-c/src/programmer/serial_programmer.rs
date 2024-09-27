@@ -16,11 +16,16 @@ const PROGRAM_INSTRUCTION: u8 = b'P';
 pub struct SerialProgrammer<R: ReadSerial, W: WriteSerial> {
     reader: R,
     writer: W,
+    verbose: bool,
 }
 
 impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
-    pub fn new(reader: R, writer: W) -> SerialProgrammer<R, W> {
-        SerialProgrammer { reader, writer }
+    pub fn new(reader: R, writer: W, verbose: bool) -> SerialProgrammer<R, W> {
+        SerialProgrammer {
+            reader,
+            writer,
+            verbose,
+        }
     }
 
     pub fn program(&mut self, port: &mut Box<dyn SerialPort>, lines: Lines<BufReader<File>>) {
@@ -71,7 +76,10 @@ impl<R: ReadSerial, W: WriteSerial> SerialProgrammer<R, W> {
             received_data.clear();
             while !instruction_sent_correctly {
                 self.reader.read(port, &mut received_data);
-                println!("[Programmer] received data: '{}'", received_data);
+
+                if self.verbose {
+                    println!("[Programmer] received data: '{}'", received_data);
+                }
 
                 if received_data.contains(resend_instruction_string) {
                     println!("[CLI] resending instruction {}", trimmed_line);
@@ -125,7 +133,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -145,7 +153,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -165,7 +173,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -178,6 +186,7 @@ mod test {
             data: vec![
                 String::from(READY_MESSAGE),
                 String::from(PROGRAMMING_STARTED_MESSAGE),
+                OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
             index: 0,
@@ -189,7 +198,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -203,6 +212,7 @@ mod test {
             data: vec![
                 String::from(READY_MESSAGE),
                 String::from(PROGRAMMING_STARTED_MESSAGE),
+                OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
             index: 0,
@@ -214,7 +224,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -230,6 +240,7 @@ mod test {
                 String::from(PROGRAMMING_STARTED_MESSAGE),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
+                OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
             index: 0,
@@ -241,7 +252,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
@@ -261,6 +272,7 @@ mod test {
                 RESEND_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
                 OK_INSTRUCTION.to_string(),
+                OK_INSTRUCTION.to_string(),
                 String::from(DONE_MESSAGE),
             ],
             index: 0,
@@ -272,7 +284,7 @@ mod test {
                 .to_string_lossy()
                 .to_string(),
         );
-        let mut programmer = SerialProgrammer::new(reader, writer);
+        let mut programmer = SerialProgrammer::new(reader, writer, true);
 
         programmer.program(&mut port, lines);
 
