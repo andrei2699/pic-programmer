@@ -11,10 +11,13 @@ fn main() {
     let cli = commands::Cli::parse();
 
     match &cli.command {
-        Commands::ListPorts => {
-            list_ports()
-        }
-        Commands::Program { input_file_path, port_name, baud_rate, timeout } => {
+        Commands::ListPorts => list_ports(),
+        Commands::Program {
+            input_file_path,
+            port_name,
+            baud_rate,
+            timeout,
+        } => {
             program_pic(input_file_path, port_name, baud_rate, timeout);
         }
     }

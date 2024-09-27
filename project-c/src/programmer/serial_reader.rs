@@ -11,9 +11,7 @@ pub trait ReadSerial {
 
 impl SerialReader {
     pub fn new(serial_buf: Vec<u8>) -> SerialReader {
-        SerialReader {
-            serial_buf,
-        }
+        SerialReader { serial_buf }
     }
 }
 
