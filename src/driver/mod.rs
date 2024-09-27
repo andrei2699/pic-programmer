@@ -1,6 +1,6 @@
-pub mod programmer;
-pub mod operations;
-pub mod special_addresses;
-mod osccal_bits;
 mod commands;
+pub mod operations;
+mod osccal_bits;
+pub mod programmer;
+pub mod special_addresses;
 mod timing_configurations;

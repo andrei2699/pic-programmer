@@ -1,4 +1,6 @@
-use crate::hex_instruction::HexInstructionReadState::{Address, ByteCount, Checksum, Data, Done, RecordType, Start};
+use crate::hex_instruction::HexInstructionReadState::{
+    Address, ByteCount, Checksum, Data, Done, RecordType, Start,
+};
 use core::fmt::Write;
 use core::ops::Add;
 use heapless::String;
@@ -137,17 +139,13 @@ impl uDisplay for HexInstruction {
             RecordType(_) => 'r',
             Data(_) => 'd',
             Checksum(_) => 'c',
-            Done => 'f'
+            Done => 'f',
         };
 
-        let _ = write!(data,
-                       "({}){}-{}-{}-{}-{}",
-                       state,
-                       self.byte_count,
-                       self.address,
-                       self.record_type,
-                       self.data,
-                       self.checksum,
+        let _ = write!(
+            data,
+            "({}){}-{}-{}-{}-{}",
+            state, self.byte_count, self.address, self.record_type, self.data, self.checksum,
         );
 
         f.write_str(data.as_str())
