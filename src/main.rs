@@ -9,7 +9,6 @@ use crate::driver::operations::ProgramMemory;
 use crate::driver::programmer::Programmer;
 use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use crate::hex_instruction::HexInstruction;
-use crate::hex_instruction::HexInstructionReadState::{Address, ByteCount, Checksum, Data, Done, RecordType, Start};
 use crate::state::States;
 use arduino_hal::hal::port::PB1;
 use arduino_hal::hal::{Atmega, Usart};
@@ -47,12 +46,11 @@ fn main() -> ! {
     programmer.init();
     setup_pwm_for_12v_charge_pump(dp.TC1, pins.d9);
 
-    ufmt::uwrite!(&mut serial, "Programmer ready!").unwrap_infallible();
+    ufmt::uwriteln!(&mut serial, "Programmer ready!").unwrap_infallible();
 
     let mut state = States::WaitingToStart;
     let mut config = DEFAULT_CONFIGURATION;
     let mut user_id = DEFAULT_USER_ID;
-    let mut current_instruction = HexInstruction::new();
 
     loop {
         match state {
@@ -65,101 +63,59 @@ fn main() -> ! {
                     if byte == PROGRAM_INSTRUCTION {
                         state = States::Program;
                         programmer.start_programming();
+                        ufmt::uwriteln!(&mut serial, "start").unwrap_infallible();
                     }
                 }
             }
             States::Program => {
-                parse_instruction(&mut serial, &mut current_instruction);
+                let current_instruction = parse_instruction(&mut serial);
 
-                if current_instruction.state != Done {
-                    continue;
-                }
-                current_instruction.state = Start;
-
-                if current_instruction.check_end_of_file() {
-                    state = States::Finished;
-                    programmer.stop_programming(config, user_id);
-                    continue;
-                } else if current_instruction.address == USER_ID_FIRST_ADDRESS {
+                if current_instruction.address == USER_ID_FIRST_ADDRESS {
                     user_id = current_instruction.data & 0xFF;
                 } else if current_instruction.address == CONFIGURATION_WORD_ADDRESS {
                     config = current_instruction.data & 0xFF;
                 }
 
-                if current_instruction.verify_checksum() {
-                    ufmt::uwrite!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
-                } else {
-                    ufmt::uwrite!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
-                }
+                let checksum = current_instruction.calculate_checksum();
+                if checksum == current_instruction.checksum {
+                    if current_instruction.check_end_of_file() {
+                        ufmt::uwriteln!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
+                        
+                        programmer.stop_programming(config, user_id);
+                        ufmt::uwriteln!(&mut serial, "done").unwrap_infallible();
+                        state = States::Finished;
+                        continue;
+                    }
 
-                programmer.program(current_instruction.address, current_instruction.data)
+                    programmer.program(current_instruction.address, current_instruction.data);
+                    ufmt::uwriteln!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
+                } else {
+                    ufmt::uwriteln!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
+                }
             }
         }
     }
 }
 
-fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>, current_instruction: &mut HexInstruction)
+fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>) -> HexInstruction
 where
     USART: UsartOps<Atmega, RX, TX>,
 {
-    if let Ok(byte) = serial.read() {
-        if byte == b'\r' || byte == b'\n' {
-            return;
-        }
+    let mut current_instruction = HexInstruction::new();
 
-        let byte = convert_byte_to_hexadecimal_if_possible(byte);
+    while !current_instruction.check_done() {
+        if let Ok(ascii_byte) = serial.read() {
+            if ascii_byte == b'\r' || ascii_byte == b'\n' {
+                continue;
+            }
 
-        match current_instruction.state {
-            Start => {
-                if byte == b':' {
-                    // ignore START CODE ':'
-                    current_instruction.init();
-                    current_instruction.state = ByteCount(2);
-                }
-            }
-            ByteCount(hex_digits_remaining) => {
-                if hex_digits_remaining > 1 {
-                    current_instruction.state = ByteCount(hex_digits_remaining - 1);
-                } else {
-                    current_instruction.state = Address(4);
-                }
-                current_instruction.byte_count = (current_instruction.byte_count) << 4 | byte;
-            }
-            Address(hex_digits_remaining) => {
-                if hex_digits_remaining > 1 {
-                    current_instruction.state = Address(hex_digits_remaining - 1)
-                } else {
-                    current_instruction.state = RecordType(2)
-                }
-                current_instruction.address = (current_instruction.address << 4) | byte as u16;
-            }
-            RecordType(hex_digits_remaining) => {
-                if hex_digits_remaining > 1 {
-                    current_instruction.state = RecordType(hex_digits_remaining - 1);
-                } else {
-                    current_instruction.state = Data(current_instruction.byte_count * 2);
-                }
-                current_instruction.record_type = (current_instruction.record_type) << 4 | byte;
-            }
-            Data(hex_digits_remaining) => {
-                if hex_digits_remaining > 1 {
-                    current_instruction.state = Data(hex_digits_remaining - 1);
-                } else {
-                    current_instruction.state = Checksum(2);
-                }
-                current_instruction.data = (current_instruction.data << 4) | byte as u16;
-            }
-            Checksum(hex_digits_remaining) => {
-                if hex_digits_remaining > 1 {
-                    current_instruction.state = Checksum(hex_digits_remaining - 1);
-                } else {
-                    current_instruction.state = Done;
-                }
-                current_instruction.checksum = (current_instruction.checksum) << 4 | byte;
-            }
-            Done => {}
+            let byte = convert_byte_to_hexadecimal_if_possible(ascii_byte);
+
+            current_instruction.add_byte_in_state(byte);
         }
     }
+
+    current_instruction
 }
 
 fn setup_pwm_for_12v_charge_pump(tc1: TC1, pwm_pin: Pin<Input<Floating>, PB1>) {

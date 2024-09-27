@@ -32,7 +32,7 @@ impl ProgramMemory for Programmer {
         self.vpp.set_low();
         self.vdd.set_low();
         self.clock.set_low();
-        self.data.take().expect("Pin should be available").set_low();
+        self.data.as_mut().unwrap().set_low();
     }
 
     fn start_programming(&mut self) {

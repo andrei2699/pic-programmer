@@ -20,9 +20,9 @@ const STOP_BIT: u8 = 0;
 impl Programmer {
     fn send_serial_lsb_data(&mut self, data: u8) {
         if (data & 1) == 1 {
-            self.data.take().expect("Pin should be available").set_high();
+            self.data.as_mut().unwrap().set_high();
         } else {
-            self.data.take().expect("Pin should be available").set_low();
+            self.data.as_mut().unwrap().set_low();
         }
 
         self.clock.set_high();
@@ -89,7 +89,8 @@ impl Programmer {
     pub fn read_data(&mut self) -> u16 {
         self.send_command(READ_DATA_COMMAND);
 
-        let data_in: Pin<Input<PullUp>, PD5> = self.data.take().expect("Pin should be available").into_pull_up_input();
+        let data_out = self.data.take().unwrap();
+        let data_in = data_out.into_pull_up_input();
 
         let mut received_data: u16 = 0;
         self.read_serial_lsb_data(&data_in); // start bit
