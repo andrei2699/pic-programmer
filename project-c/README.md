@@ -4,7 +4,9 @@ A simple cli app that connects to an Arduino and send the contents of a hex file
 
 ## Programming protocol
 
-- Wait for the message "Programmer ready!"
+- Wait for the message `Programmer ready!`
+- send `P` to start programming
+- wait for message `start`
 - read lines from input file and send them one by one until end of file
 - read message from programmer
 
