@@ -1,7 +1,9 @@
 use super::programmer::Programmer;
-use crate::driver::operations::ProgramMemory;
+use crate::driver::operations::InitProgrammer;
 use crate::driver::special_addresses::{ADDRESS_SIZE, CONFIGURATION_WORD_ADDRESS};
-use crate::driver::timing_configurations::{T_DIS, T_DLY2, T_ERA, T_HLD0, T_HLD1, T_PPDP, T_PROG, T_RESET, T_SET};
+use crate::driver::timing_configurations::{
+    T_DIS, T_DLY2, T_ERA, T_HLD0, T_HLD1, T_PPDP, T_PROG, T_RESET, T_SET,
+};
 use arduino_hal::hal::port::PD5;
 use arduino_hal::port::mode::{Input, PullUp};
 use arduino_hal::port::Pin;

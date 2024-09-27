@@ -1,11 +1,11 @@
 #![no_std]
 #![no_main]
 
-mod hex_instruction;
 mod driver;
+mod hex_instruction;
 mod state;
 
-use crate::driver::operations::ProgramMemory;
+use crate::driver::operations::{InitProgrammer, ProgramMemory, ReadMemory};
 use crate::driver::programmer::Programmer;
 use crate::driver::special_addresses::{CONFIGURATION_WORD_ADDRESS, USER_ID_FIRST_ADDRESS};
 use crate::hex_instruction::HexInstruction;
@@ -25,6 +25,7 @@ use panic_halt as _;
 const OK_INSTRUCTION: u8 = b'Y';
 const RESEND_INSTRUCTION: u8 = b'R';
 const PROGRAM_INSTRUCTION: u8 = b'P';
+const READ_STORED_PROGRAM_INSTRUCTION: u8 = b'D';
 const DEFAULT_CONFIGURATION: u16 = 0xFF;
 const DEFAULT_USER_ID: u16 = 0xAA;
 
@@ -64,6 +65,9 @@ fn main() -> ! {
                         state = States::Program;
                         programmer.start_programming();
                         ufmt::uwriteln!(&mut serial, "start").unwrap_infallible();
+                    } else if byte == READ_STORED_PROGRAM_INSTRUCTION {
+                        state = States::ReadContents;
+                        ufmt::uwriteln!(&mut serial, "start").unwrap_infallible();
                     }
                 }
             }
@@ -80,7 +84,7 @@ fn main() -> ! {
                 if checksum == current_instruction.checksum {
                     if current_instruction.check_end_of_file() {
                         ufmt::uwriteln!(&mut serial, "{}", OK_INSTRUCTION).unwrap_infallible();
-                        
+
                         programmer.stop_programming(config, user_id);
                         ufmt::uwriteln!(&mut serial, "done").unwrap_infallible();
                         state = States::Finished;
@@ -93,11 +97,31 @@ fn main() -> ! {
                     ufmt::uwriteln!(&mut serial, "{}", RESEND_INSTRUCTION).unwrap_infallible();
                 }
             }
+            States::ReadContents => {
+                programmer.start_reading();
+
+                let mut has_printed_configuration_address = false;
+                while !has_printed_configuration_address
+                    || programmer.current_address != CONFIGURATION_WORD_ADDRESS
+                {
+                    let data = programmer.read();
+                    programmer.increment_address();
+                    ufmt::uwriteln!(&mut serial, "A:{:04X} | D:{:04X}", data.address, data.data)
+                        .unwrap_infallible();
+                    has_printed_configuration_address = true;
+                }
+
+                programmer.stop_reading();
+                ufmt::uwriteln!(&mut serial, "done").unwrap_infallible();
+                state = States::Finished;
+            }
         }
     }
 }
 
-fn parse_instruction<USART, RX, TX, CLOCK>(serial: &mut Usart<USART, RX, TX, CLOCK>) -> HexInstruction
+fn parse_instruction<USART, RX, TX, CLOCK>(
+    serial: &mut Usart<USART, RX, TX, CLOCK>,
+) -> HexInstruction
 where
     USART: UsartOps<Atmega, RX, TX>,
 {
