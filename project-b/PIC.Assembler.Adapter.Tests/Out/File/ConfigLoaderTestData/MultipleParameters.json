@@ -1,0 +1,31 @@
+{
+  "bits": 8,
+  "opcode": 12,
+  "configAddress": "FFF",
+  "instructions": [
+    {
+      "name": "MULTIPLE-PARAMETERS",
+      "parameters": [
+        {
+          "name": "a"
+        },
+        {
+          "name": "b"
+        },
+        {
+          "name": "c"
+        },
+        {
+          "name": "d"
+        },
+        {
+          "name": "e"
+        },
+        {
+          "name": "f"
+        }
+      ],
+      "opcode": "abcdefef0011"
+    }
+  ]
+}

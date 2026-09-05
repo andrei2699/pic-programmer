@@ -1,0 +1,11 @@
+{
+  "bits": 8,
+  "opcode": 12,
+  "configAddress": "FFF",
+  "instructions": [
+    {
+      "name": "NO-PARAMS",
+      "parameters": []
+    }
+  ]
+}
